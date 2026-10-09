@@ -1,0 +1,70 @@
+{
+  "tag": "zerofu_cifar10_z01_4-5",
+  "seed": 0,
+  "data": {
+    "name": "cifar10",
+    "root": "data",
+    "n_clients": 10,
+    "partition": "dirichlet",
+    "zeta": 0.1,
+    "min_size": 20,
+    "backdoor_client": 5,
+    "backdoor_frac": 0.3
+  },
+  "model": {
+    "ident": "labeldist",
+    "dim": 512,
+    "lk": 16,
+    "lv": 16
+  },
+  "fl": {
+    "rounds": 20,
+    "local_epochs": 3,
+    "lr": 0.005,
+    "batch_size": 32,
+    "lam1": 0.1,
+    "lam2": 0.1,
+    "participation": 1.0,
+    "eval_every": 5
+  },
+  "unlearn": {
+    "rounds": 2000,
+    "kd_steps": 9,
+    "batch_size": 128,
+    "tau": 2.0,
+    "beta": 5.0,
+    "gamma": 2.0,
+    "gen_obj": "auto"
+  },
+  "pair": {
+    "retained": 4,
+    "forget": 5
+  },
+  "run": {
+    "variants": [
+      "full"
+    ]
+  },
+  "sequential": {
+    "retained": 0,
+    "forget": [
+      1,
+      2,
+      3
+    ],
+    "tf_source": "original"
+  },
+  "continue": {
+    "rounds": 20,
+    "protocols": [
+      "none",
+      "pair_adopt",
+      "all_pairs_avg",
+      "all_pairs_shared",
+      "fed_distill",
+      "retrain"
+    ],
+    "fd_rounds": 20,
+    "fd_local": 100
+  }
+}
