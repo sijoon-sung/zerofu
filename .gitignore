@@ -2,6 +2,6 @@ __pycache__/
 *.pyc
 checkpoints/
 logs/
-results/*_smoke/
+results/
 data/
 .venv/

@@ -47,11 +47,14 @@ class PromptGen(nn.Module):
 
     def __init__(self, dim: int, lk: int = 16, lv: int = 16):
         super().__init__()
-        self.p_base = nn.Parameter(torch.randn(dim) * 0.02 + 1.0)   # 원소곱이라 1 근처에서 시작 (가정)
-        self.wq = nn.Parameter(torch.randn(1, lk) / math.sqrt(lk))
-        self.wk = nn.Parameter(torch.randn(1, lk) / math.sqrt(lk))
-        self.wv = nn.Parameter(torch.randn(1, lv) / math.sqrt(lv))
-        self.wproj = nn.Parameter(torch.zeros(lv, 1))
+        # 초기값은 논문에 없다. 식 (7) 을 글자 그대로 옮기면 특징 차원 하나가 토큰 하나라 점수가 d_ij·P_base,l·(w_q·w_k) 꼴이 되어,
+        # P_base 를 1 근처로 두거나 투영을 작게 두면 클라이언트마다 프롬프트가 똑같아진다 (분산 1e-6, 확인함).
+        # 그래서 P_base ~ N(0,1), 투영 ~ N(0,1) 로 둔다 (같은 조건에서 클라이언트 간 분산 ≈ 10).
+        self.p_base = nn.Parameter(torch.randn(dim))
+        self.wq = nn.Parameter(torch.randn(1, lk))
+        self.wk = nn.Parameter(torch.randn(1, lk))
+        self.wv = nn.Parameter(torch.randn(1, lv))
+        self.wproj = nn.Parameter(torch.randn(lv, 1))
         self.lk = lk
 
     def forward(self, d: torch.Tensor) -> torch.Tensor:
