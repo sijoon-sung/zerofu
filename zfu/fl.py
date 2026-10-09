@@ -31,6 +31,7 @@ class FLCfg:
     lam1: float = 0.1
     lam2: float = 0.1
     participation: float = 1.0    # α = 1
+    reg: str = "mean"             # λ‖·‖² 을 원소 합(sum, 식 그대로) 또는 평균(mean)으로. sum 이면 Mimir 프롬프트가 모두 같아짐 (확인함)
     eval_every: int = 5
 
 
@@ -40,7 +41,10 @@ def batches(n: int, bs: int, gen: torch.Generator, device):
         yield perm[i:i + bs]
 
 
-def sq_norm(params) -> torch.Tensor:
+def sq_norm(params, how: str = "sum") -> torch.Tensor:
+    if how == "mean":
+        ps = list(params)
+        return sum((p ** 2).sum() for p in ps) / max(sum(p.numel() for p in ps), 1)
     return sum((p ** 2).sum() for p in params)
 
 
@@ -70,7 +74,7 @@ def local_update(model: Net, c: torch.Tensor, x, y, cfg: FLCfg, gen: torch.Gener
         others = [p for n, p in gp.named_parameters() if n != "p_base"]
         for idx in batches(len(y), cfg.batch_size, gen, dev):
             out, _ = model(x[idx], d)
-            loss = F.cross_entropy(out, y[idx]) + cfg.lam1 * sq_norm(others) + cfg.lam2 * (gp.p_base ** 2).sum()
+            loss = F.cross_entropy(out, y[idx]) + cfg.lam1 * sq_norm(others, cfg.reg) + cfg.lam2 * sq_norm([gp.p_base], cfg.reg)
             opt2.zero_grad()
             loss.backward()
             opt2.step()
@@ -80,8 +84,8 @@ def local_update(model: Net, c: torch.Tensor, x, y, cfg: FLCfg, gen: torch.Gener
         for idx in batches(len(y), cfg.batch_size, gen, dev):
             out, aux = model(x[idx], c)
             loss = (F.cross_entropy(out, y[idx]) + em_loss(aux["f_g"], model.cond.embeddings(), y[idx])
-                    + cfg.lam1 * sq_norm(model.cond.egen.parameters())
-                    + cfg.lam2 * (sq_norm(model.cond.cm_w.parameters()) + sq_norm(model.cond.cm_b.parameters())))
+                    + cfg.lam1 * sq_norm(model.cond.egen.parameters(), cfg.reg)
+                    + cfg.lam2 * sq_norm(list(model.cond.cm_w.parameters()) + list(model.cond.cm_b.parameters()), cfg.reg))
             opt.zero_grad()
             loss.backward()
             opt.step()

@@ -23,7 +23,21 @@ run.py             진입점
 configs/           mimir.toml, zerofu.toml (논문 값은 출처 주석, 없는 값은 "가정")
 ```
 
-## 실행
+## 한 번에 실행 (딸칵)
+
+```bash
+pip install -r requirements.txt     # Python 3.11 이상 (tomllib), CUDA 판 torch 권장
+run_all.bat                         # 윈도우: 더블클릭. 리눅스/맥: python run_all.py
+run_all.bat --estimate              # 이 컴퓨터에서 몇 시간 걸릴지 1~2분 재고 끝
+```
+
+- 두 방법 × 4 데이터(MNIST·FMNIST·SVHN·CIFAR-10) × ζ(0.01, 0.1) × 논문의 (C_r, C_f) 2쌍 = **작업 32개**.
+  SVHN ζ=0.1 에서는 논문 절제(L_F 뺌, 생성기 뺌)도 같이.
+- 데이터는 `data/` 에 자동으로 받는다. 끊겨도 다시 실행하면 끝난 작업은 건너뛰고 하던 작업은 라운드 단위로 이어 간다.
+- 끝나면 `results/summary.md` 에 **논문 표(Mimir 표 III, ZeroFU 표 1) 값과 우리 값을 나란히** 적는다.
+- 옵션: `--workers 3` (동시 작업 수, 기본 2), `--only mimir`, `--datasets mnist cifar10`, `--zetas 0.1`, `--rounds 50`, `--summary` (요약만), `--smoke` (배관 확인).
+
+## 하나씩 실행
 
 ```bash
 python run.py --config configs/mimir.toml --stage pair --smoke        # 축소 설정, 1~2분
@@ -42,7 +56,8 @@ python run.py --config configs/mimir.toml --stage sequential          # 연속 �
 | 연합학습 라운드 수 | 20 | Mimir 그림 1 예시 |
 | SGD 모멘텀 | 0 | 식 (11) 이 순수 경사하강 |
 | Mimir λ_g 근접항 (식 1) | 뺌 | 알고리즘 1 에 없음 |
-| 서술자 d_i 초기값, P_base 초기값, l_k·l_v | N(0,1), 1 근처, 16 | 없음 |
+| 서술자 d_i, P_base, 프롬프트 생성기 투영 초기값, l_k·l_v | 전부 N(0,1), 16 | 없음. 식 (7) 을 글자 그대로 옮기면 특징 차원 하나가 토큰 하나라, P_base 를 1 근처로 두거나 투영을 작게(또는 0) 두면 모든 클라이언트 프롬프트가 같아져 개인화가 안 생긴다 (확인함) |
+| 정규화 λ‖·‖² | 원소 **평균** (`fl.reg = "mean"`) | 식 (12)(14) 그대로 원소 합으로 하면 λ=0.1 이 P_base 를 0 으로 끌어 프롬프트가 모두 같아진다 (10 라운드 뒤 클라이언트 간 분산 1e-6, 확인함). 평균으로 하면 클라이언트별 정확도 98~100% 로 논문 수준 |
 | 지우기 반복 T_u, 가짜 배치, 옵티마이저 | 2000, 128, Adam 2e-3/1e-3 + 코사인 | ZSKT(Micaelli & Storkey 2019) 기본값 |
 | L_K 의 교사 | T_R | Mimir 식 (16) 아래 문장이 T 를 T_F 로 적었지만 "T_R 과 S 사이 지식 전달"이라 함 |
 | 학생 초기화 | 무작위, 이름표 부품은 복사해 고정 | ZeroFU 알고리즘 2 줄 1-2 |
@@ -55,6 +70,15 @@ python run.py --config configs/mimir.toml --stage sequential          # 연속 �
 - `dr_acc`, `df_acc`: C_r·C_f 학습 데이터 정확도. 재학습(`retrain`)과 가까울수록 좋음.
 - `df_acc_max`: C_f 데이터를 남은 클라이언트 이름표 전부로 재서 가장 높은 값.
 - `asr`: 백도어 성공률. `mia_prec/rec`: 멤버십 추론. `wdist`: 재학습과의 θ·φ 거리.
+
+## 지금까지 알게 된 것 (MNIST ζ=0.01, C_r=0, C_f=1)
+
+- 정규화를 식 그대로(원소 합) 걸면 두 방법 모두 개인화가 안 생기고, 그 상태에서는 지우기도 안 된다
+  (Mimir: 지운 뒤 Df 94%, 재학습 2%). 평균으로 바꾸면 개인화가 논문 수준으로 생긴다.
+- 개인화가 생기면 **지우기 전 원래 모델에 C_r 이름표만 붙여도 C_f 데이터를 0% 맞힌다.**
+  논문 표의 "지운 뒤 Df ≈ 0" 은 상당 부분 개인화에서 온다. 요약표의 "Origin(C_r 이름표) Df" 칸이 이 기준선이다.
+- ZeroFU 생성기 목표를 식 (18) 그대로(L_F 만) 쓰면 학생이 C_r 데이터도 못 맞힌다 (Dr 0%).
+  변형 `gen_lflk` (Mimir 식 19 처럼 L_F + βL_K) 로 비교할 수 있다.
 
 ---
 
@@ -82,6 +106,19 @@ python run.py --config configs/mimir.toml --stage sequential          # 연속 �
 | `all_pairs_shared` | 같지만 학생 초기값을 모두 같게 → 평균 |
 | `fed_distill` | 같은 초기 학생에서 출발, 라운드마다 각자 자기 교사로 조금씩 지우기 증류 → 서버 평균 (총 반복 수는 한 쌍 지우기와 같음) |
 | `retrain` | C_f 없이 처음부터 학습한 모델 (기준) |
+
+한 번에 (딸칵):
+
+```bash
+run_topic_a.bat                     # = python run_all.py --topic-a : 두 방법 × MNIST·CIFAR-10 × ζ 2개 = 8 작업
+run_topic_a.bat --estimate          # 걸리는 시간만 재기
+run_topic_a.bat --datasets mnist fmnist svhn cifar10 --cont-rounds 30 --workers 3
+```
+
+재현 작업(`run_all.bat`)과 같은 tag 를 쓰므로 재현을 먼저 돌렸으면 원래 모델·재학습을 다시 하지 않는다.
+끝나면 `results/summary_topic_a.md` (프로토콜별 지운 직후 → 끝 값) 와 작업마다 `results/<tag>/fig_continue.png`.
+
+하나씩:
 
 ```bash
 python run.py --config configs/mimir.toml --stage continue

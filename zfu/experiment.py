@@ -26,6 +26,11 @@ from .unlearn import UnlearnCfg, unlearn
 from .continuation import ContinueCfg, continue_after
 
 
+# 지우기 변형: full = 설정 그대로, no_lf = 그림 11(b), no_dg = 그림 12(a),
+# gen_lf / gen_lflk = 생성기 목표를 ZeroFU 식 (18) / Mimir 식 (19) 로 강제 (두 논문 차이 확인용)
+VARIANTS = {"no_lf": {"use_lf": False}, "no_dg": {"use_dg": False}, "gen_lf": {"gen_obj": "lf"}, "gen_lflk": {"gen_obj": "lf_lk"}}
+
+
 def _fill(cls, d: dict):
     names = {f.name for f in fields(cls)}
     return cls(**{k: v for k, v in d.items() if k in names})
@@ -38,6 +43,8 @@ class Experiment:
         self.seed = cfg.get("seed", 0)
         self.dev = torch.device(cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
         self.dcfg = _fill(D.DataCfg, cfg["data"])
+        if not Path(self.dcfg.root).is_absolute():          # 상대 경로는 저장소 기준
+            self.dcfg.root = str(root / self.dcfg.root)
         self.flcfg = _fill(FLCfg, cfg.get("fl", {}))
         self.ucfg = _fill(UnlearnCfg, cfg.get("unlearn", {}))
         self.mcfg = cfg.get("model", {})
@@ -129,7 +136,7 @@ class Experiment:
             {"model": "retrain", **evaluate(retr, self.fed, rconds, r, f, retained, self.seed, retr)},
         ]
         for v in variants:
-            ucfg = UnlearnCfg(**{**asdict(self.ucfg), **{"no_lf": {"use_lf": False}, "no_dg": {"use_dg": False}}.get(v, {})})
+            ucfg = UnlearnCfg(**{**asdict(self.ucfg), **VARIANTS.get(v, {})})
             path = self.ckdir / f"unlearned_{r}-{f}_{v}.pt"
             stu = self.build()
             if path.exists():
