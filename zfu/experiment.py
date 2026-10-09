@@ -5,6 +5,7 @@
   retrain    지울 클라이언트를 뺀 나머지로 처음부터 → retrain_<빠진 목록>.pt  (기준 모델)
   unlearn    (C_r, C_f) 한 쌍에 대해 지우기 변형들(full / no_lf / no_dg) → unlearned_<변형>.pt, 결과 CSV
   sequential 연속 삭제 (후속 주제용 틀): C_f 를 차례로 지우며 매번 재학습과 비교
+  continue   주제 A: 지운 직후 서버가 어떤 모델로 시작하느냐(프로토콜)별로 연합학습을 더 돌리며 되살아남 추적
 산출물이 이미 있으면 그 단계는 건너뛴다 (다시 하려면 파일을 지운다). 연합학습은 라운드마다 저장하고 이어 간다.
 """
 from __future__ import annotations
@@ -22,6 +23,7 @@ from .fl import FLCfg, accuracy, run as fl_run
 from .metrics import evaluate
 from .model import Net
 from .unlearn import UnlearnCfg, unlearn
+from .continuation import ContinueCfg, continue_after
 
 
 def _fill(cls, d: dict):
@@ -92,7 +94,7 @@ class Experiment:
             with open(path, encoding="utf-8") as fh:
                 old = list(csv.DictReader(fh))
         def key(r):
-            return tuple(str(r.get(k, "")) for k in ("model", "step", "retained", "forget"))
+            return tuple(str(r.get(k, "")) for k in ("model", "step", "protocol", "t", "retained", "forget"))
         keys = {key(r) for r in rows}
         old = [r for r in old if key(r) not in keys]
         allrows = old + [{k: (f"{v:.4f}" if isinstance(v, float) else v) for k, v in r.items()} for r in rows]
@@ -180,3 +182,10 @@ class Experiment:
             rows += [row, rrow]
             self.log("  " + json.dumps({k2: (round(v, 4) if isinstance(v, float) else v) for k2, v in row.items()}))
         self._append(rows, "sequential.csv")
+
+    def continue_stage(self):
+        cc = self.cfg.get("continue", {})
+        ccfg = _fill(ContinueCfg, cc)
+        protocols = cc.get("protocols", ["none", "pair_adopt", "retrain"])
+        rows = continue_after(self, protocols, ccfg, self.flcfg)
+        self._append(rows, "continue.csv")

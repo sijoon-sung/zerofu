@@ -55,3 +55,43 @@ python run.py --config configs/mimir.toml --stage sequential          # 연속 �
 - `dr_acc`, `df_acc`: C_r·C_f 학습 데이터 정확도. 재학습(`retrain`)과 가까울수록 좋음.
 - `df_acc_max`: C_f 데이터를 남은 클라이언트 이름표 전부로 재서 가장 높은 값.
 - `asr`: 백도어 성공률. `mia_prec/rec`: 멤버십 추론. `wdist`: 재학습과의 θ·φ 거리.
+
+---
+
+## 주제 A (브랜치 `topic/continue-after-unlearning`): 지운 뒤에도 연합학습은 계속된다
+
+**질문.** 두 논문의 지우기는 남는 클라이언트 C_r 한 명과 지울 클라이언트 C_f 한 쌍 사이에서 일어나고,
+결과 학생은 C_r 에서만 쓰인다.
+
+- Mimir §IV-C: "the unlearned model continues to work on C_r"
+- Mimir §VI-G: 지우기 시간은 C_r 과 C_f 사이 계산이라 클라이언트 수와 무관
+- ZeroFU §3.1: 지우기는 클라이언트 쪽에서, 교사는 C_r 의 모델
+
+그러면 나머지 클라이언트는 C_f 가 섞인 원래 모델을 그대로 갖고, 연합은 그 상태로 다시 이어진다.
+그렇다고 모두가 각자 학생을 만들면 학생마다 무작위로 처음부터 배워서 평균할 수 없다.
+**데이터 없이 지운 뒤 연합 전체가 다시 함께 학습하려면 서버는 무엇으로 다시 시작해야 하나?** 두 논문 모두 다루지 않는다.
+
+**실험.** 지운 직후 서버가 갖는 모델(프로토콜)을 바꿔 가며, 남은 클라이언트로 연합학습을 C 라운드 더 돌리고
+라운드마다 C_f 데이터 정확도·백도어 성공률(되살아나는가)과 남은 클라이언트 전원의 정확도(다른 사람이 망가졌나)를 잰다.
+
+| 프로토콜 | 서버가 다시 시작하는 모델 |
+|---|---|
+| `none` | 지우기 없이 원래 모델 (C_f 만 빠짐 = 그냥 떠나기, 미세조정 기준선) |
+| `pair_adopt` | 논문 그대로 한 쌍 지우기의 학생을 전역 모델로 채택 |
+| `all_pairs_avg` | 남은 전원이 각자 한 쌍 지우기 (각자 무작위 초기화, 논문처럼) → 평균 |
+| `all_pairs_shared` | 같지만 학생 초기값을 모두 같게 → 평균 |
+| `fed_distill` | 같은 초기 학생에서 출발, 라운드마다 각자 자기 교사로 조금씩 지우기 증류 → 서버 평균 (총 반복 수는 한 쌍 지우기와 같음) |
+| `retrain` | C_f 없이 처음부터 학습한 모델 (기준) |
+
+```bash
+python run.py --config configs/mimir.toml --stage continue
+python run.py --config configs/zerofu.toml --stage continue
+python plot_continue.py --tag mimir_mnist_z001          # results/<tag>/fig_continue.png
+```
+
+결과: `results/<tag>/continue.csv` (protocol, t, df_max, df_r, asr_max, ret_mean, ret_min, cr_acc, test_mean).
+`all_pairs_*` 는 한 쌍 지우기를 남은 인원수만큼 하므로 비용이 그만큼 든다 (로그에 시작 모델 만드는 데 걸린 시간).
+
+**미리 보는 예상 (검증 전).** `pair_adopt` 는 학생이 C_r 교사에게서만 배워서 다른 남은 클라이언트 정확도(ret_min)가
+처음에 크게 떨어질 수 있고, 이어지는 학습이 그걸 회복하는 동안 C_f 흔적이 되살아나는지가 관심사다.
+`all_pairs_avg` 는 평균이 깨질 것으로 예상하고, `all_pairs_shared`·`fed_distill` 이 그걸 고치는지 본다.

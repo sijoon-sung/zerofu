@@ -48,3 +48,9 @@ variants = ["full", "no_lf", "no_dg"]   # 그림 11(b), 그림 12(a) 절제
 retained = 0
 forget = [1, 2, 3]
 tf_source = "original"
+
+[continue]                     # 주제 A (topic/continue-after-unlearning 브랜치): 지운 뒤 연합학습을 더 돌린다
+rounds = 20                    # 지운 뒤 추가 라운드 C
+protocols = ["none", "pair_adopt", "all_pairs_avg", "all_pairs_shared", "fed_distill", "retrain"]
+fd_rounds = 20                 # fed_distill 통신 라운드
+fd_local = 100                 # 라운드당 클라이언트별 지우기 반복 (20 × 100 = 2000 = 한 쌍 지우기와 같은 총량)

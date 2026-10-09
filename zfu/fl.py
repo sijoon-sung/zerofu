@@ -118,11 +118,17 @@ def init_conds(model: Net, fed, clients, gen: torch.Generator, device) -> dict[i
     return {i: fed.ld[i].to(device) for i in clients}
 
 
-def run(model: Net, fed, clients: list[int], cfg: FLCfg, seed: int, ckpt: Path | None = None, log=print):
-    """clients 로만 연합학습. ckpt 가 있으면 라운드마다 저장하고 이어 간다. (model, conds) 반환."""
+def run(model: Net, fed, clients: list[int], cfg: FLCfg, seed: int, ckpt: Path | None = None, log=print,
+        conds: dict | None = None, rounds: int | None = None, on_round=None):
+    """clients 로만 연합학습. ckpt 가 있으면 라운드마다 저장하고 이어 간다. (model, conds) 반환.
+    conds 를 주면 그 이름표에서 이어 가고 (지운 뒤 계속 학습), on_round(r, model, conds) 는 라운드마다 부른다."""
     dev = next(model.parameters()).device
+    for p in model.parameters():          # 지우기 때 고정했던 부품도 다시 학습 대상으로
+        p.requires_grad_(True)
     gen = torch.Generator().manual_seed(seed)
-    conds = init_conds(model, fed, clients, gen, dev)
+    init = init_conds(model, fed, clients, gen, dev)
+    conds = {i: (conds[i].clone() if conds is not None and i in conds else init[i]) for i in clients}
+    total = rounds if rounds is not None else cfg.rounds
     start = 0
     if ckpt is not None and ckpt.exists():
         st = torch.load(ckpt, map_location=dev)
@@ -132,7 +138,9 @@ def run(model: Net, fed, clients: list[int], cfg: FLCfg, seed: int, ckpt: Path |
         gen.set_state(st["gen"])
         log(f"  resume from round {start}")
     sizes = {i: len(fed.ys[i]) for i in clients}
-    for r in range(start, cfg.rounds):
+    if on_round is not None and start == 0:
+        on_round(0, model, conds)
+    for r in range(start, total):
         n_pick = max(1, round(cfg.participation * len(clients)))
         pick = [clients[j] for j in torch.randperm(len(clients), generator=gen)[:n_pick].tolist()]
         g_state = copy.deepcopy(model.state_dict())
@@ -143,9 +151,11 @@ def run(model: Net, fed, clients: list[int], cfg: FLCfg, seed: int, ckpt: Path |
             states.append(copy.deepcopy(model.state_dict()))
             ws.append(sizes[i])
         model.load_state_dict(fedavg(states, ws))
-        if (r + 1) % cfg.eval_every == 0 or r + 1 == cfg.rounds:
+        if on_round is not None:
+            on_round(r + 1, model, conds)
+        if (r + 1) % cfg.eval_every == 0 or r + 1 == total:
             accs = [accuracy(model, conds[i], fed.xs[i], fed.ys[i]) for i in clients]
-            log(f"  round {r + 1}/{cfg.rounds}  mean local acc {sum(accs) / len(accs):.4f}")
+            log(f"  round {r + 1}/{total}  mean local acc {sum(accs) / len(accs):.4f}")
         if ckpt is not None:
             torch.save({"model": model.state_dict(), "conds": conds, "round": r + 1, "gen": gen.get_state()}, ckpt)
     return model, conds
