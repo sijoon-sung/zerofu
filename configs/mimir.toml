@@ -1,0 +1,50 @@
+# Mimir (IEEE TMC 2025) 재현 기본 설정. 논문에 있는 값은 주석에 출처, 없는 값은 "가정".
+tag = "mimir_mnist_z001"
+seed = 0
+
+[data]
+name = "mnist"                 # mnist | fmnist | svhn | cifar10
+root = "C:/Users/sijoo/Documents/pytorch-deeplearning-study/data"
+n_clients = 10                 # §VI-A-5
+partition = "dirichlet"        # dirichlet | pathological
+zeta = 0.01                    # 0.01 / 0.1
+min_size = 20                  # 가정
+backdoor_client = 1            # 백도어는 지울 클라이언트 C_f 에 (§VI-A-4)
+backdoor_frac = 0.3            # 가정
+
+[model]
+ident = "prompt"               # Mimir 학습형 서술자
+dim = 512                      # FC 512 (§VI-A-2)
+lk = 16                        # 가정
+lv = 16                        # 가정
+
+[fl]
+rounds = 20                    # 가정 (그림 1 예시)
+local_epochs = 3               # T_l = 3
+lr = 0.005
+batch_size = 32
+lam1 = 0.1
+lam2 = 0.1
+participation = 1.0            # α = 1
+eval_every = 5
+
+[unlearn]
+rounds = 2000                  # T_u 가정
+kd_steps = 9                   # T_k (ZeroFU 와 같은 값으로 둠)
+batch_size = 128               # 가정
+tau = 2.0
+beta = 5.0
+gamma = 2.0
+gen_obj = "auto"               # prompt → L_F + βL_K (식 19)
+
+[pair]                         # 표 III 의 (C_r, C_f) 쌍: ζ=0.01 은 (0,1)(8,9), ζ=0.1 은 (4,5)(3,6)
+retained = 0
+forget = 1
+
+[run]
+variants = ["full", "no_lf", "no_dg"]   # 그림 11(b), 그림 12(a) 절제
+
+[sequential]                   # 후속 주제용 틀 (논문에 없음)
+retained = 0
+forget = [1, 2, 3]
+tf_source = "original"

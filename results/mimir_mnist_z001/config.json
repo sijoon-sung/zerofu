@@ -1,0 +1,59 @@
+{
+  "tag": "mimir_mnist_z001",
+  "seed": 0,
+  "data": {
+    "name": "mnist",
+    "root": "C:/Users/sijoo/Documents/pytorch-deeplearning-study/data",
+    "n_clients": 10,
+    "partition": "dirichlet",
+    "zeta": 0.01,
+    "min_size": 20,
+    "backdoor_client": 1,
+    "backdoor_frac": 0.3
+  },
+  "model": {
+    "ident": "prompt",
+    "dim": 512,
+    "lk": 16,
+    "lv": 16
+  },
+  "fl": {
+    "rounds": 20,
+    "local_epochs": 3,
+    "lr": 0.005,
+    "batch_size": 32,
+    "lam1": 0.1,
+    "lam2": 0.1,
+    "participation": 1.0,
+    "eval_every": 5
+  },
+  "unlearn": {
+    "rounds": 2000,
+    "kd_steps": 9,
+    "batch_size": 128,
+    "tau": 2.0,
+    "beta": 5.0,
+    "gamma": 2.0,
+    "gen_obj": "auto"
+  },
+  "pair": {
+    "retained": 0,
+    "forget": 1
+  },
+  "run": {
+    "variants": [
+      "full",
+      "no_lf",
+      "no_dg"
+    ]
+  },
+  "sequential": {
+    "retained": 0,
+    "forget": [
+      1,
+      2,
+      3
+    ],
+    "tf_source": "original"
+  }
+}
